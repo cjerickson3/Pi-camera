@@ -75,9 +75,9 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   has its own photocell, so the Pi does not detect night itself.
 - **Scope:** one burrow watched (down from three). Zones per hole are no
   longer needed; a single optional ROI mask in config is enough.
-- **Timestamp burned into the video.** Planned approach: pre-render glyphs
-  with Pillow once, then copy them into the Y plane of the main YUV420
-  buffer in a picamera2 `pre_callback`. No OpenCV (too heavy for the Zero).
+- **No burned-in timestamp** (dropped for now). Clips and thumbnails are
+  named by local date-time, e.g. `20261115-021433.mp4`; the DB holds the
+  exact times. Revisit if the pest control company needs it on-frame.
 - **Video plan (to confirm with `tools/camera_test.py --video`):** 2x2 binned
   sensor mode 1640x1232, main 1280x960 YUV420 → H.264 at ~3 Mbps, lores
   320x240 YUV420 for motion, 10-15 fps at night. MP4 via `PyavOutput`.
