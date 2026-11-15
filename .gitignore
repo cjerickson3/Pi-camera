@@ -1,0 +1,27 @@
+.env
+__pycache__/
+*.pyc
+.playwright/
+
+# Python
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Runtime data (lives on the Pi, never in git)
+clips/
+stills/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.mp4
+*.h264
+*.jpg
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

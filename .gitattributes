@@ -1,0 +1,35 @@
+# Normalize to LF by default
+* text=auto eol=lf
+
+# Keep Windows-specific scripts CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Be explicit for common text types
+*.py  text eol=lf
+*.md  text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.csv  text eol=lf
+
+# Optional: Excel is binary, keep as-is
+*.xlsx -text
+*.xlsm -text
+
+# Pi-side files must stay LF
+*.sh      text eol=lf
+*.service text eol=lf
+*.timer   text eol=lf
+*.toml    text eol=lf
+*.sql     text eol=lf
+*.html    text eol=lf
+*.css     text eol=lf
+*.js      text eol=lf
+
+# Media
+*.jpg  binary
+*.png  binary
+*.mp4  binary
+*.h264 binary
