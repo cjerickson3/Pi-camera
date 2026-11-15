@@ -24,8 +24,8 @@ The camera's job:
 | Raspberry Pi Zero 2 W, in a case | Quad-core, 512 MB RAM. Keep the software light. |
 | 128 GB high-endurance microSD | Holds OS, clips, and the event database |
 | Camera Module 2 NoIR (IMX219, 8 MP) | No IR filter, for night viewing. Fixed focus. Pi Zero camera cable. |
-| 12 V IR illuminator | Has its own 12 V supply. Not switched or controlled by the Pi. |
-| 5 V USB power supply for the Pi | Rating to be confirmed; the Zero 2 W with camera and WiFi wants 2 A or more |
+| 12 V IR illuminator | Has its own 12 V supply and a built-in photocell (on at dusk). Not switched or controlled by the Pi. |
+| 5 V USB power supply for the Pi | 2.2 A (official rec. is 2.5 A). Should be fine; verify `vcgencmd get_throttled` = `0x0` under load. |
 | CanaKit USB microSD reader | For imaging the card from the PC |
 
 Enclosure: bench setup first. Later, a weatherproof outdoor case with 120 V
@@ -45,7 +45,11 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 - GitHub repo: `cjerickson3/Pi-camera`, **public** (so the Pi can `git pull`
   over HTTPS with no deploy key). Never commit secrets, WiFi credentials, or
   clips. `.gitattributes` forces LF for everything that runs on the Pi.
-- The Pi runs headless: Raspberry Pi OS Lite, WiFi, SSH.
+- The Pi runs headless: Raspberry Pi OS Lite 64-bit, WiFi, SSH.
+  Hostname `zero`, user `chris`, SSH key `~/.ssh/pi_key` (same key as
+  Chris's other Pi, `homepi`). Card reader on the PC is drive F:.
+- Remote access via **Tailscale** (SSH and the review page). Setup steps:
+  `docs/pi-setup.md`.
 - Deploy to the Pi with `git pull` over SSH (or rsync).
 - Camera code cannot run on the PC. Keep hardware access (camera, GPIO)
   behind a thin layer so the rest can be tested on the PC with a fake camera.
@@ -63,6 +67,22 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 - Config (resolution, sensitivity, clip length, retention, active hours)
   lives in one file, not scattered through the code.
 - Night footage is monochrome IR. Do not spend effort on color tuning.
+
+## Decisions
+
+- **Recording window:** one hour after sunset until sunrise, computed for
+  Plano, TX (approx. 33.02 N, 96.70 W) with `python3-astral`. The illuminator
+  has its own photocell, so the Pi does not detect night itself.
+- **Scope:** one burrow watched (down from three). Zones per hole are no
+  longer needed; a single optional ROI mask in config is enough.
+- **Timestamp burned into the video.** Planned approach: pre-render glyphs
+  with Pillow once, then copy them into the Y plane of the main YUV420
+  buffer in a picamera2 `pre_callback`. No OpenCV (too heavy for the Zero).
+- **Video plan (to confirm with `tools/camera_test.py --video`):** 2x2 binned
+  sensor mode 1640x1232, main 1280x960 YUV420 → H.264 at ~3 Mbps, lores
+  320x240 YUV420 for motion, 10-15 fps at night. MP4 via `PyavOutput`.
+- **Clip review:** small web page on the Pi, served on the tailnet only, plus
+  an rsync script for archiving starred clips to the PC.
 
 ## Requirements
 
@@ -92,9 +112,6 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Open questions
 
-- Pi power supply rating (see hardware table).
-- Clip review method: recommended a small web page on the Pi (plus an rsync
-  script for archiving starred clips); awaiting confirmation.
-- Recording window (sunset/sunrise vs fixed vs 24/7), IR illuminator photocell
-  or always-on, LAN-only vs remote review access, burned-in timestamp.
-- Camera placement and distance to each burrow (affects focus and IR aim).
+- Distance from camera to the burrow (affects focus; the lens is set for
+  about 1 m to infinity).
+- Night exposure and frame rate: pick from the camera test's bracket.
