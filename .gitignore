@@ -19,6 +19,10 @@ data/
 *.mp4
 *.h264
 *.jpg
+*.jpeg
+*.heic
+aiming/
+photos/
 
 # Editors / OS
 .vscode/
