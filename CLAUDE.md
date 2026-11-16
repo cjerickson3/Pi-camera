@@ -24,7 +24,7 @@ The camera's job:
 | Raspberry Pi Zero 2 W, in a case | Quad-core, 512 MB RAM. Keep the software light. |
 | 128 GB high-endurance microSD | Holds OS, clips, and the event database |
 | Camera Module 2 NoIR (IMX219, 8 MP) | No IR filter, for night viewing. Fixed focus. Pi Zero camera cable. |
-| 12 V IR illuminator | Has its own 12 V supply and a built-in photocell (on at dusk). Not switched or controlled by the Pi. |
+| 12 V IR illuminator | **850 nm** (faint red glow visible on the LEDs). Small grey dome. Has its own 12 V supply and a built-in photocell (on at dusk). Not switched or controlled by the Pi. Must sit beside the camera aiming at the scene, never facing the lens. |
 | 5 V USB power supply for the Pi | Official Raspberry Pi 2.5 A supply (replaced an earlier 2.2 A one). Still check `vcgencmd get_throttled` = `0x0` under load. |
 | CanaKit USB microSD reader | For imaging the card from the PC |
 
