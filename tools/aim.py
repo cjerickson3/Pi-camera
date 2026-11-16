@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
 from picamera2 import Picamera2
 
+TUNING = "imx219_noir.json"  # NoIR camera; see CLAUDE.md
 SENSOR_MODE = (1640, 1232)   # 2x2 binned, full field of view (same as the app plan)
 VIEW_SIZE = (1024, 768)
 MAX_FRAME_US = 66_667        # 15 fps cap
@@ -166,7 +167,8 @@ def main() -> int:
     ap.add_argument("--gain", type=float, default=8.0, help="analogue gain with --exposure")
     args = ap.parse_args()
 
-    picam2 = Picamera2()
+    # The default imx219.json tuning's AWB/CCM wipes out IR at night (mean 0.6 vs 12).
+    picam2 = Picamera2(tuning=Picamera2.load_tuning_file(TUNING))
     if args.exposure:
         us = int(args.exposure * 1000)
         controls = {"AeEnable": False, "ExposureTime": us, "AnalogueGain": args.gain,

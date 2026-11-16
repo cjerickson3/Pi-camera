@@ -26,6 +26,7 @@ import numpy as np
 from picamera2 import Picamera2
 
 # Planned video settings (2x2 binned sensor mode keeps full FOV and is better in low light).
+TUNING = "imx219_noir.json"  # NoIR camera; see CLAUDE.md
 SENSOR_MODE = (1640, 1232)
 MAIN_SIZE = (1280, 960)
 LORES_SIZE = (320, 240)
@@ -195,7 +196,8 @@ def main() -> int:
                     help="only run the live sharpness readout")
     args = ap.parse_args()
 
-    picam2 = Picamera2()
+    # The default imx219.json tuning's AWB/CCM wipes out IR at night (mean 0.6 vs 12).
+    picam2 = Picamera2(tuning=Picamera2.load_tuning_file(TUNING))
     print(f"Camera: {picam2.camera_properties.get('Model')}  "
           f"pixel array {picam2.camera_properties.get('PixelArraySize')}")
     print("Sensor modes:")

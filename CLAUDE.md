@@ -86,6 +86,12 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 - **Video plan (to confirm with `tools/camera_test.py --video`):** 2x2 binned
   sensor mode 1640x1232, main 1280x960 YUV420 → H.264 at ~3 Mbps, lores
   320x240 YUV420 for motion, 10-15 fps at night. MP4 via `PyavOutput`.
+- **Camera tuning: always load `imx219_noir.json`**
+  (`Picamera2(tuning=Picamera2.load_tuning_file("imx219_noir.json"))`). With
+  the default `imx219.json`, auto white balance decides IR is ~2400 K
+  incandescent and its colour correction cancels the signal: measured
+  2026-11-15 at 66.6 ms / gain 9.85, mean brightness 0.6 with the default
+  tuning vs 12.2 with the NoIR tuning, on the same scene.
 - **Clip review:** small web page on the Pi, served on the tailnet only, plus
   an rsync script for archiving starred clips to the PC.
 
