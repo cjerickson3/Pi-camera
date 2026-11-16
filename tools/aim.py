@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Live aiming view: serves a self-refreshing camera image over HTTP.
 
+Put the hole inside the yellow centre box; 'box' is its mean brightness
+(aim 40-120), which matters more than the whole-frame mean when the light
+is a spot.
+
 Run on the Pi, then open the printed URL on a phone while adjusting the
 camera, light and focus:
     python3 tools/aim.py                    # auto exposure, capped at 15 fps like the app
@@ -27,6 +31,7 @@ TUNING = "imx219_noir.json"  # NoIR camera; see CLAUDE.md
 SENSOR_MODE = (1640, 1232)   # 2x2 binned, full field of view (same as the app plan)
 VIEW_SIZE = (1024, 768)
 MAX_FRAME_US = 66_667        # 15 fps cap
+BOX_FRAC = 0.25              # centre box (fraction of width/height) measured as the target area
 
 PAGE = """<!doctype html>
 <html><head><meta charset="utf-8">
@@ -39,10 +44,12 @@ PAGE = """<!doctype html>
   .h, .v { position: absolute; background: rgba(0,255,0,.5); }
   .h { left: 0; right: 0; top: 50%; height: 1px; }
   .v { top: 0; bottom: 0; left: 50%; width: 1px; }
+  .box { position: absolute; border: 1px solid rgba(255,255,0,.6);
+         left: BOXPOS%; top: BOXPOS%; width: BOXSIZE%; height: BOXSIZE%; }
   #stats { padding: 8px 10px; font-variant-numeric: tabular-nums; }
   .bad { color: #f66; }
 </style></head><body>
-<div class="wrap"><img id="img" alt="camera"><div class="h"></div><div class="v"></div></div>
+<div class="wrap"><img id="img" alt="camera"><div class="h"></div><div class="v"></div><div class="box"></div></div>
 <div id="stats">connecting...</div>
 <script>
 const img = document.getElementById('img'), st = document.getElementById('stats');
@@ -56,9 +63,10 @@ async function tick() {
     await new Promise((ok, err) => { img.onload = ok; img.onerror = err;
                                      img.src = '/latest.jpg?n=' + s.frame; });
     const clip = s.clipped_pct > 1 ? ' class="bad"' : '';
-    st.innerHTML = `exp ${s.exposure_ms} ms &middot; gain ${s.gain} &middot; ` +
-      `mean ${s.mean} (aim 60-120) &middot; <span${clip}>clip ${s.clipped_pct}%</span> &middot; ` +
-      `sharp ${s.sharpness} &middot; frame ${s.frame}`;
+    const dim = s.box_mean < 40 ? ' class="bad"' : '';
+    st.innerHTML = `<b><span${dim}>box ${s.box_mean}</span></b> (aim 40-120) &middot; ` +
+      `frame ${s.mean} &middot; <span${clip}>clip ${s.clipped_pct}%</span> &middot; ` +
+      `sharp ${s.sharpness}<br>exp ${s.exposure_ms} ms &middot; gain ${s.gain} &middot; #${s.frame}`;
   } catch (e) {
     st.innerHTML = '<span class="bad">lost connection, retrying</span>';
   }
@@ -67,7 +75,7 @@ async function tick() {
 setInterval(tick, 700);
 tick();
 </script></body></html>
-"""
+""".replace("BOXPOS", f"{(1 - BOX_FRAC) / 2 * 100:g}").replace("BOXSIZE", f"{BOX_FRAC * 100:g}")
 
 
 class Latest:
@@ -106,6 +114,9 @@ def capture_loop(picam2: Picamera2, latest: Latest, interval: float, stop: threa
         finally:
             req.release()
         gray = np.asarray(image.convert("L"))
+        h, w = gray.shape
+        bh, bw = int(h * BOX_FRAC), int(w * BOX_FRAC)
+        box = gray[(h - bh) // 2:(h + bh) // 2, (w - bw) // 2:(w + bw) // 2]
         buf = io.BytesIO()
         image.save(buf, "JPEG", quality=80)
         frame += 1
@@ -114,6 +125,7 @@ def capture_loop(picam2: Picamera2, latest: Latest, interval: float, stop: threa
             "exposure_ms": round(md.get("ExposureTime", 0) / 1000, 1),
             "gain": round(md.get("AnalogueGain", 0), 2),
             "mean": round(float(gray.mean()), 1),
+            "box_mean": round(float(box.mean()), 1),
             "clipped_pct": round(float((gray >= 250).mean() * 100), 2),
             "sharpness": round(sharpness(gray), 1),
         })
