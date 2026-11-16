@@ -70,6 +70,10 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Decisions
 
+- **Camera to burrow distance:** about 2.5 ft (0.76 m). That is just inside
+  the lens's stock focus range (~1 m to infinity); check with
+  `camera_test.py --focus` and adjust the lens if soft.
+
 - **Recording window:** one hour after sunset until sunrise, computed for
   Plano, TX (approx. 33.02 N, 96.70 W) with `python3-astral`. The illuminator
   has its own photocell, so the Pi does not detect night itself.
@@ -112,6 +116,7 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Open questions
 
-- Distance from camera to the burrow (affects focus; the lens is set for
-  about 1 m to infinity).
-- Night exposure and frame rate: pick from the camera test's bracket.
+- Aim: first night test (2026-11-15) was nearly level, mostly trees and sky,
+  with blurry grass in the foreground. Re-aim down at the hole and re-test.
+- Night exposure: tentatively AE with frame duration capped at 66.7 ms
+  (15 fps). In the first test AE chose 66 ms at gain ~10. Confirm after re-aim.
