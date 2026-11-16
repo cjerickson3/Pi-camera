@@ -76,8 +76,10 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 - **Recording window:** one hour after sunset until sunrise, computed for
   Plano, TX (approx. 33.02 N, 96.70 W) with `python3-astral`. The illuminator
   has its own photocell, so the Pi does not detect night itself.
-- **Scope:** one burrow watched (down from three). Zones per hole are no
-  longer needed; a single optional ROI mask in config is enough.
+- **Scope:** one burrow watched (down from three): the hole **beside the
+  sidewalk**. Zones per hole are no longer needed; a single optional ROI mask
+  in config is enough. During setup a 12" ruler stands just right of the hole
+  for scale.
 - **No burned-in timestamp** (dropped for now). Clips and thumbnails are
   named by local date-time, e.g. `20261115-021433.mp4`; the DB holds the
   exact times. Revisit if the pest control company needs it on-frame.
@@ -115,7 +117,9 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Open questions
 
-- Aim: first night test (2026-11-15) was nearly level, mostly trees and sky,
-  with blurry grass in the foreground. Re-aim down at the hole and re-test.
+- Aim: night tests on 2026-11-15 had the camera and light at grass level,
+  looking level across the yard (mostly trees and sky; the hole was hidden by
+  grass and unlit). Both need raising and tilting down at the hole. Use
+  `tools/aim.py` (live view on port 8000) while adjusting.
 - Night exposure: tentatively AE with frame duration capped at 66.7 ms
   (15 fps). In the first test AE chose 66 ms at gain ~10. Confirm after re-aim.
