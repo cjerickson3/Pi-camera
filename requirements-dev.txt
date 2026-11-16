@@ -1,0 +1,6 @@
+# PC-side development and tests only. The Pi uses apt packages (see pyproject.toml).
+numpy
+pillow
+astral
+tzdata      # Windows has no system time zone database
+pytest

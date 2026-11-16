@@ -75,7 +75,13 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   with `camera_test.py --focus`.
 - **Recording window:** one hour after sunset until sunrise, computed for
   Plano, TX (approx. 33.02 N, 96.70 W) with `python3-astral`. The illuminator
-  has its own photocell, so the Pi does not detect night itself.
+  has its own photocell, so the Pi does not detect night itself. Outside the
+  window the camera is stopped entirely (no daytime clips).
+- **Clips:** 5 s pre-roll, 5 s post-roll, 60 s cap (cap may come down later).
+  Trigger needs 3 consecutive motion frames.
+- **Data location on the Pi:** `~/picam-data/` holds `clips/<night>/`
+  (MP4 + JPEG snapshot per event; `<night>` is the evening's date),
+  `events.db`, and `scores/<night>.csv` (per-second motion scores for tuning).
 - **Scope:** one burrow watched (down from three): the hole **beside the
   sidewalk**. Zones per hole are no longer needed; a single optional ROI mask
   in config is enough. During setup a 12" ruler stands just right of the hole

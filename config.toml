@@ -1,0 +1,51 @@
+# Pi-camera configuration. All tunables live here; picam/config.py has the
+# defaults and validation. Unknown keys are an error, so typos fail loudly.
+
+[camera]
+tuning = "imx219_noir.json"     # NoIR tuning; the default imx219.json wipes out IR at night
+sensor_mode = [1640, 1232]      # 2x2 binned: full field of view, better low light
+main_size = [1280, 960]         # recorded H.264 stream
+lores_size = [320, 240]         # motion-detection stream (Y plane only is used)
+fps = 15
+max_exposure_ms = 66.7          # cap; 66.7 ms holds 15 fps. 133 = brighter but 7.5 fps and more blur
+bitrate = 3_000_000
+greyscale = true                # NoIR night colours carry no information
+
+[motion]
+# A detector pixel (lores downscaled 2x to 160x120) "changed" if it differs
+# from the running background by more than pixel_threshold (0-255 luma).
+pixel_threshold = 12
+# Fraction of the detection area that must change for a frame to count as motion.
+min_area = 0.004
+# Speck filter: a changed pixel survives only if at least this many of its 3x3
+# neighbourhood (itself included) also changed. Kills sensor noise and rain specks.
+min_neighbours = 4
+background_alpha = 0.05         # how fast the background adapts (per frame)
+lighting_change = 0.5           # >50% of the whole frame changing at once = lighting, not motion
+warmup_frames = 30              # frames to learn the background after (re)start
+trigger_frames = 3              # consecutive motion frames needed to start a clip
+
+# Detection area as [x0, y0, x1, y1] fractions of the frame (0,0 = top left).
+# Motion is only counted inside `include` and outside `exclude`.
+# Check placement with: python3 tools/aim.py (rectangles are drawn on the view).
+include = [[0.0, 0.0, 1.0, 1.0]]
+exclude = []
+
+[clips]
+preroll_s = 5
+postroll_s = 5                  # stop this long after the last motion
+max_clip_s = 60
+
+[schedule]
+latitude = 33.02
+longitude = -96.70
+timezone = "America/Chicago"
+start_after_sunset_min = 60
+stop_after_sunrise_min = 0
+
+[pir]
+enabled = false                 # hook for a PIR sensor later (gpiozero MotionSensor)
+gpio_pin = 17                   # BCM numbering
+
+[paths]
+data_dir = "~/picam-data"

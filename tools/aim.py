@@ -3,7 +3,8 @@
 
 Put the hole inside the yellow centre box; 'box' is its mean brightness
 (aim 40-120), which matters more than the whole-frame mean when the light
-is a spot.
+is a spot. The motion detection area from config.toml is drawn on top:
+green = [motion] include, red = [motion] exclude.
 
 Run on the Pi, then open the printed URL on a phone while adjusting the
 camera, light and focus:
@@ -23,9 +24,13 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import numpy as np
 from picamera2 import Picamera2
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from picam import config as picam_config  # noqa: E402
 
 TUNING = "imx219_noir.json"  # NoIR camera; see CLAUDE.md
 SENSOR_MODE = (1640, 1232)   # 2x2 binned, full field of view (same as the app plan)
@@ -44,12 +49,15 @@ PAGE = """<!doctype html>
   .h, .v { position: absolute; background: rgba(0,255,0,.5); }
   .h { left: 0; right: 0; top: 50%; height: 1px; }
   .v { top: 0; bottom: 0; left: 50%; width: 1px; }
+  .area { position: absolute; border: 2px dashed; box-sizing: border-box; }
+  .inc { border-color: rgba(0,255,0,.7); }
+  .exc { border-color: rgba(255,60,60,.8); background: rgba(255,0,0,.12); }
   .box { position: absolute; border: 1px solid rgba(255,255,0,.6);
          left: BOXPOS%; top: BOXPOS%; width: BOXSIZE%; height: BOXSIZE%; }
   #stats { padding: 8px 10px; font-variant-numeric: tabular-nums; }
   .bad { color: #f66; }
 </style></head><body>
-<div class="wrap"><img id="img" alt="camera"><div class="h"></div><div class="v"></div><div class="box"></div></div>
+<div class="wrap"><img id="img" alt="camera"><div class="h"></div><div class="v"></div><div class="box"></div><!--AREAS--></div>
 <div id="stats">connecting...</div>
 <script>
 const img = document.getElementById('img'), st = document.getElementById('stats');
@@ -132,13 +140,21 @@ def capture_loop(picam2: Picamera2, latest: Latest, interval: float, stop: threa
         stop.wait(max(0.0, interval - (time.monotonic() - t0)))
 
 
-def make_handler(latest: Latest):
+def area_divs(cfg) -> str:
+    def div(cls, r):
+        x0, y0, x1, y1 = (v * 100 for v in r)
+        return (f'<div class="area {cls}" style="left:{x0:g}%;top:{y0:g}%;'
+                f'width:{x1 - x0:g}%;height:{y1 - y0:g}%"></div>')
+    return "".join([div("inc", r) for r in cfg.motion.include] + [div("exc", r) for r in cfg.motion.exclude])
+
+
+def make_handler(latest: Latest, page: str):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = self.path.split("?", 1)[0]
             jpeg, stats = latest.get()
             if path == "/":
-                self.send(200, "text/html; charset=utf-8", PAGE.encode())
+                self.send(200, "text/html; charset=utf-8", page.encode())
             elif path == "/latest.jpg" and jpeg:
                 self.send(200, "image/jpeg", jpeg)
             elif path == "/stats.json":
@@ -177,7 +193,10 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=0.7, help="seconds between frames")
     ap.add_argument("--exposure", type=float, metavar="MS", help="fixed exposure; default is auto")
     ap.add_argument("--gain", type=float, default=8.0, help="analogue gain with --exposure")
+    ap.add_argument("--config", type=Path, default=picam_config.DEFAULT_PATH,
+                    help="draw this config's motion detection area")
     args = ap.parse_args()
+    page = PAGE.replace("<!--AREAS-->", area_divs(picam_config.load(args.config)))
 
     # The default imx219.json tuning's AWB/CCM wipes out IR at night (mean 0.6 vs 12).
     picam2 = Picamera2(tuning=Picamera2.load_tuning_file(TUNING))
@@ -198,7 +217,7 @@ def main() -> int:
     threading.Thread(target=capture_loop, args=(picam2, latest, args.interval, stop),
                      daemon=True).start()
 
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(latest))
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(latest, page))
     print("Aim view running. Open one of these on your phone:")
     for u in urls(args.port):
         print(f"  {u}")
