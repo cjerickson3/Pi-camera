@@ -6,6 +6,7 @@ FakeCamera: synthetic frames for tests and for running the app on the PC.
 
 from __future__ import annotations
 
+import threading
 import time
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
@@ -74,10 +75,16 @@ class PiCamera:
             raw={"size": tuple(cfg.sensor_mode)},
             controls=controls,
         ))
-        self._encoder = H264Encoder(bitrate=cfg.bitrate)
-        # Keeps the last preroll_s of encoded video; a clip starts with that buffer.
+        # A keyframe every second: a clip can only begin on one, so this bounds the lost start.
+        self._encoder = H264Encoder(bitrate=cfg.bitrate, iperiod=max(1, round(cfg.fps)))
+        # CircularOutput2 is a delay line: frames reach the open file only once they are
+        # preroll_s old. Opening a file therefore starts it preroll_s in the past (the pre-roll),
+        # and closing must wait preroll_s for the rest to drain in (see stop_clip).
+        self._preroll_s = preroll_s
         self._circular = CircularOutput2(buffer_duration_ms=int(preroll_s * 1000))
+        self._lock = threading.Lock()
         self._clip_open = False
+        self._closer: threading.Timer | None = None
         self._running = False
 
     def start(self) -> None:
@@ -86,10 +93,14 @@ class PiCamera:
             self._running = True
 
     def stop(self) -> None:
-        self.stop_clip()
-        if self._running:
-            self._picam2.stop_recording()
-            self._running = False
+        with self._lock:
+            self._cancel_closer()
+            # stop_recording() stops the CircularOutput2, which flushes everything still
+            # buffered into an open clip and closes it, so its tail is kept.
+            if self._running:
+                self._picam2.stop_recording()
+                self._running = False
+            self._clip_open = False
 
     def close(self) -> None:
         self.stop()
@@ -115,13 +126,37 @@ class PiCamera:
     def start_clip(self, path: Path) -> None:
         from picamera2.outputs import PyavOutput
         path.parent.mkdir(parents=True, exist_ok=True)
-        self._circular.open_output(PyavOutput(str(path)))
-        self._clip_open = True
+        with self._lock:
+            if self._clip_open:
+                # Previous clip still draining. Its remaining tail (post-roll) is the same
+                # footage as this clip's pre-roll, so cutting it short loses nothing.
+                self._cancel_closer()
+                self._circular.close_output()
+            self._circular.open_output(PyavOutput(str(path)))
+            self._clip_open = True
 
     def stop_clip(self) -> None:
-        if self._clip_open:
-            self._circular.close_output()
-            self._clip_open = False
+        """End the clip once the delay line has drained into it (preroll_s from now)."""
+        with self._lock:
+            if self._clip_open and self._closer is None:
+                self._closer = threading.Timer(self._preroll_s, self._drained)
+                self._closer.daemon = True
+                self._closer.start()
+
+    def _drained(self) -> None:
+        with self._lock:
+            # Runs in the Timer's thread; ignore a timer that was superseded or cancelled.
+            if self._closer is not threading.current_thread():
+                return
+            self._closer = None
+            if self._clip_open:
+                self._circular.close_output()
+                self._clip_open = False
+
+    def _cancel_closer(self) -> None:
+        if self._closer is not None:
+            self._closer.cancel()
+            self._closer = None
 
 
 # --- fake camera -----------------------------------------------------------------
