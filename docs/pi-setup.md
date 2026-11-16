@@ -47,11 +47,10 @@ vcgencmd get_throttled             # expect: throttled=0x0
 If no camera is listed, check `camera_auto_detect=1` in
 `/boot/firmware/config.txt` and reseat the cable.
 
-**Power:** the supply is 2.2 A against an official 2.5 A recommendation. The
-Zero 2 W with camera and WiFi usually draws well under 1 A, so it should be
-fine, but `get_throttled` must stay `0x0` after the video test. `0x50005`
-or similar means under-voltage: change the supply or use a shorter, thicker
-USB cable.
+**Power:** the Pi runs on the official Raspberry Pi 2.5 A supply, which meets
+the recommended rating. `get_throttled` should still read `0x0` after the
+video test. `0x50005` or similar means under-voltage, most likely from a
+loose connector or an extension cable added for the outdoor install.
 
 Optional SD-wear reduction:
 
