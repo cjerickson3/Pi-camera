@@ -70,10 +70,9 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Decisions
 
-- **Camera to burrow distance:** about 2.5 ft (0.76 m). That is just inside
-  the lens's stock focus range (~1 m to infinity); check with
-  `camera_test.py --focus` and adjust the lens if soft.
-
+- **Camera to burrow distance:** about 2.5 ft (0.76 m). That is a little
+  closer than the lens's stock near limit (~1 m), so expect to adjust focus
+  with `camera_test.py --focus`.
 - **Recording window:** one hour after sunset until sunrise, computed for
   Plano, TX (approx. 33.02 N, 96.70 W) with `python3-astral`. The illuminator
   has its own photocell, so the Pi does not detect night itself.
