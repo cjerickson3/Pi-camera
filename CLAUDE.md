@@ -101,6 +101,24 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 - **Clip review:** small web page on the Pi, served on the tailnet only, plus
   an rsync script for archiving starred clips to the PC.
 
+## Code layout and running
+
+- `picam/`: the app. Only `camera.py` touches picamera2 (`PiCamera`); the rest
+  is pure Python and NumPy and runs on the PC with `FakeCamera`.
+  `config.py` + `config.toml` · `motion.py` (detector) · `recorder.py` (clip
+  state machine) · `schedule.py` (astral) · `events.py` (SQLite) ·
+  `triggers.py` (PIR hook) · `main.py` (loop and CLI).
+- On the Pi: `python3 -m picam` (also `--always-on`, `--dry-run`,
+  `--duration S`). On the PC: `python -m picam --fake --always-on`.
+- Tests on the PC: `.venv\Scripts\python -m pytest` (venv from
+  `requirements-dev.txt`). The Pi has no pytest.
+- `tools/camera_test.py` (stills and exposure bracket) and `tools/aim.py`
+  (live view on :8000 with the detection area drawn) are standalone.
+- **picamera2 gotcha:** `CircularOutput2` (picamera2 0.3.39) is a delay line,
+  not a dump-on-open buffer. Frames reach the open file only once they are
+  `preroll_s` old, so `PiCamera.stop_clip()` closes the file `preroll_s`
+  later. Closing immediately loses the whole live part of the clip.
+
 ## Requirements
 
 1. Detect motion at night from the camera stream.
