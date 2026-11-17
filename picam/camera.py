@@ -63,6 +63,9 @@ class PiCamera:
         from picamera2 import Picamera2
         from picamera2.encoders import H264Encoder
         from picamera2.outputs import CircularOutput2
+        # PyavOutput imports av lazily on first open: ~1.5 s on the Zero (3+ s under load),
+        # holding the GIL, which dropped 3 s of the first clip. Pay it here instead.
+        import av  # noqa: F401
 
         self.cfg = cfg
         self._picam2 = Picamera2(tuning=Picamera2.load_tuning_file(cfg.tuning))
