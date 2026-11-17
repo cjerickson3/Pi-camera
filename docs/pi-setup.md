@@ -52,13 +52,11 @@ the recommended rating. `get_throttled` should still read `0x0` after the
 video test. `0x50005` or similar means under-voltage, most likely from a
 loose connector or an extension cable added for the outdoor install.
 
-Optional SD-wear reduction:
+Check swap is zram, not a file on the card: `swapon --show`.
 
-```sh
-sudo sed -i 's/^#\?Storage=.*/Storage=volatile/' /etc/systemd/journald.conf
-sudo systemctl restart systemd-journald
-swapon --show                       # want zram, not /var/swap
-```
+Raspberry Pi OS keeps the journal in RAM only
+(`/usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf`), so a crash
+or power loss erases the logs. `deploy/install.sh` (step 6) overrides that.
 
 ## 4. Tailscale
 
@@ -112,3 +110,27 @@ python3 tools/camera_test.py --focus 60
 
 Keep the scene and lighting fixed. Put something with texture (a printed page)
 at the hole and turn the lens slowly for the highest number.
+
+## 6. Install the service
+
+```sh
+cd ~/Pi-camera && git pull
+sudo deploy/install.sh
+```
+
+This installs and starts `picam.service` (enabled at boot, restarts on
+failure; the app itself idles outside the night window). It also:
+
+- makes the journal persistent (`/etc/systemd/journald.conf.d/50-persistent.conf`,
+  capped at 100 MB), so `journalctl -b -1` works after a crash;
+- turns WiFi power saving off (`/etc/NetworkManager/conf.d/wifi-powersave-off.conf`,
+  plus `iw` immediately). With it on, the Zero dropped off Tailscale for the
+  night of 2026-11-16 while the camera kept running.
+
+Day to day:
+
+```sh
+journalctl -u picam -f              # live log
+systemctl status picam
+git pull && sudo systemctl restart picam   # deploy (re-run install.sh if deploy/ changed)
+```

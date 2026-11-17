@@ -1,0 +1,24 @@
+[Unit]
+Description=Pi-camera night motion recorder
+Documentation=https://github.com/cjerickson3/Pi-camera
+# No RTC: prefer a synced clock for the night schedule. The main loop
+# re-checks the schedule at least once a minute, so a late NTP jump is fine.
+After=time-sync.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chris
+Group=chris
+WorkingDirectory=/home/chris/Pi-camera
+ExecStart=/usr/bin/python3 -m picam
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=10
+# picam closes the open clip on SIGTERM; CircularOutput2 needs preroll_s
+# (5 s) to drain before the file is complete.
+TimeoutStopSec=30
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

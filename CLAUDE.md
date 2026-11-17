@@ -117,6 +117,11 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   `--duration S`). On the PC: `python -m picam --fake --always-on`.
 - Tests on the PC: `.venv\Scripts\python -m pytest` (venv from
   `requirements-dev.txt`). The Pi has no pytest.
+- `deploy/`: `picam.service`, a persistent-journal drop-in (Pi OS defaults to
+  a RAM-only journal), a NetworkManager drop-in turning WiFi power save off
+  (it dropped the Zero off Tailscale overnight), and `install.sh` that puts
+  them in place. Run `sudo deploy/install.sh` on the Pi (sudo needs a
+  password, so Chris runs it). Logs: `journalctl -u picam`.
 - `tools/camera_test.py` (stills and exposure bracket) and `tools/aim.py`
   (live view on :8000 with the detection area drawn) are standalone.
 - **picamera2 gotcha:** `CircularOutput2` (picamera2 0.3.39) is a delay line,
@@ -152,8 +157,10 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Open questions
 
-- Sensitivity: `min_area` 0.01 and the 2026-11-16 detection area are a first
-  guess. Confirm against a night of `--dry-run` score CSVs, especially
-  for grass moving in wind.
-- Night exposure: tentatively AE with frame duration capped at 66.7 ms
-  (15 fps). In the first test AE chose 66 ms at gain ~10. Confirm after re-aim.
+- Sensitivity: `min_area` 0.01 and the 2026-11-16 detection area. The
+  2026-11-16 `--dry-run` night (19:44–06:59) scored 0 every second except
+  8 short bursts (10–11 PM busiest), with no lighting changes, so no wind
+  false triggers so far. Confirm against clips.
+- Night exposure: AE with frame duration capped at 66.7 ms (15 fps) held
+  66.7 ms / gain 9.85, brightness ~24, all night on 2026-11-16. Looks settled;
+  check the clips are usable.
