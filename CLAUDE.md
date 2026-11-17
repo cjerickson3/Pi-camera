@@ -86,6 +86,11 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   sidewalk**. Zones per hole are no longer needed; a single optional ROI mask
   in config is enough. During setup a 12" ruler stands just right of the hole
   for scale.
+- **Aim (set 2026-11-16):** camera on a tripod ~1 m from the hole, looking
+  down at the sidewalk edge. The hole (~2" across, against the sidewalk, ~1"
+  left of the ruler) sits at about (0.54, 0.45) of the frame. Grass around it
+  was trimmed so the hole is visible. Detection area in `config.toml` is a
+  ~12" x 10" patch around the hole.
 - **No burned-in timestamp** (dropped for now). Clips and thumbnails are
   named by local date-time, e.g. `20261115-021433.mp4`; the DB holds the
   exact times. Revisit if the pest control company needs it on-frame.
@@ -147,9 +152,8 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Open questions
 
-- Aim: night tests on 2026-11-15 had the camera and light at grass level,
-  looking level across the yard (mostly trees and sky; the hole was hidden by
-  grass and unlit). Both need raising and tilting down at the hole. Use
-  `tools/aim.py` (live view on port 8000) while adjusting.
+- Sensitivity: `min_area` 0.01 and the 2026-11-16 detection area are a first
+  guess. Confirm against a night of `--dry-run` score CSVs, especially
+  for grass moving in wind.
 - Night exposure: tentatively AE with frame duration capped at 66.7 ms
   (15 fps). In the first test AE chose 66 ms at gain ~10. Confirm after re-aim.

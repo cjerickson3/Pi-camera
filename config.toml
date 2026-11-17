@@ -16,7 +16,8 @@ greyscale = true                # NoIR night colours carry no information
 # from the running background by more than pixel_threshold (0-255 luma).
 pixel_threshold = 12
 # Fraction of the detection area that must change for a frame to count as motion.
-min_area = 0.004
+# 0.01 of the area below is ~17 detector pixels; a 2" head at the hole is ~65.
+min_area = 0.01
 # Speck filter: a changed pixel survives only if at least this many of its 3x3
 # neighbourhood (itself included) also changed. Kills sensor noise and rain specks.
 min_neighbours = 4
@@ -28,7 +29,11 @@ trigger_frames = 3              # consecutive motion frames needed to start a cl
 # Detection area as [x0, y0, x1, y1] fractions of the frame (0,0 = top left).
 # Motion is only counted inside `include` and outside `exclude`.
 # Check placement with: python3 tools/aim.py (rectangles are drawn on the view).
-include = [[0.0, 0.0, 1.0, 1.0]]
+# 2026-11-16: the hole is against the sidewalk edge ~1" left of the ruler, at
+# about (0.52-0.56, 0.42-0.47). The area is a ~12" x 10" patch around it: the
+# hole, the trimmed grass in front, and a strip of sidewalk edge. Most of the
+# sidewalk and the dark lawn are left out.
+include = [[0.40, 0.33, 0.72, 0.60]]
 exclude = []
 
 [clips]
