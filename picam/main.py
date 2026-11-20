@@ -24,6 +24,7 @@ from .camera import Camera, Frame
 from .config import DEFAULT_PATH, Config, load as load_config
 from .events import Event, EventLog
 from .motion import MotionDetector, MotionResult
+from .prune import prune
 from .recorder import Action, Recorder
 from .schedule import NightSchedule
 from .triggers import Trigger, build_triggers
@@ -164,12 +165,22 @@ class App:
         return frames
 
     def _go_active(self, wall: datetime):
+        self._prune(wall)
         self.camera.start()
         self.detector.reset()
         self._new_recorder()
         self._running = True
         until = "" if self.schedule.always_on else f" until {self.schedule.next_change(wall):%H:%M}"
         log.info("camera on%s%s", until, " (dry run: no clips, no database)" if self.dry_run else "")
+
+    def _prune(self, wall: datetime):
+        if self.events is None:         # dry run: no clips, and no record of what is starred
+            return
+        try:
+            prune(self.cfg.paths.clips_dir, self.events, self.cfg.retention,
+                  self.schedule.night_label(wall))
+        except Exception:
+            log.exception("pruning failed; recording anyway")
 
     def _go_idle(self, wall: datetime):
         if self._event is not None:

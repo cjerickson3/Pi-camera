@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 SCHEMA_VERSION = 1
+BUSY_TIMEOUT_S = 10.0
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -51,13 +52,20 @@ class Event:
         return (self.ended_at - self.started_at).total_seconds()
 
 
+def connect(path: Path, check_same_thread: bool = True) -> sqlite3.Connection:
+    """Open events.db. picam and the review page both write to it (WAL mode), so wait
+    up to BUSY_TIMEOUT_S for the other side's lock rather than failing."""
+    db = sqlite3.connect(path, timeout=BUSY_TIMEOUT_S, check_same_thread=check_same_thread)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA synchronous=NORMAL")
+    return db
+
+
 class EventLog:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path)
-        self.db.row_factory = sqlite3.Row
+        self.db = connect(path)
         self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("PRAGMA synchronous=NORMAL")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
         if version > SCHEMA_VERSION:
             raise RuntimeError(f"{path} has schema v{version}; this code knows v{SCHEMA_VERSION}")
@@ -82,6 +90,18 @@ class EventLog:
             return self.db.execute("SELECT * FROM events ORDER BY started_at").fetchall()
         return self.db.execute("SELECT * FROM events WHERE night = ? ORDER BY started_at",
                                (night,)).fetchall()
+
+    def starred_files(self) -> set[str]:
+        """Clip and snapshot paths (relative to the clips dir) of starred events."""
+        rows = self.db.execute("SELECT clip, snapshot FROM events WHERE starred = 1").fetchall()
+        return {p for r in rows for p in r if p}
+
+    def forget_files(self, paths: set[str]):
+        """Clear clip/snapshot references to deleted files; the event rows stay."""
+        with self.db:
+            for col in ("clip", "snapshot"):
+                self.db.executemany(f"UPDATE events SET {col} = NULL WHERE {col} = ?",
+                                    [(p,) for p in sorted(paths)])
 
     def close(self):
         self.db.close()

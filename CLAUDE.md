@@ -25,6 +25,7 @@ The camera's job:
 | 128 GB high-endurance microSD | Holds OS, clips, and the event database |
 | Camera Module 2 NoIR (IMX219, 8 MP) | No IR filter, for night viewing. Fixed focus. Pi Zero camera cable. |
 | 12 V IR illuminator | **850 nm** (faint red glow visible on the LEDs). Small grey dome. Has its own 12 V supply and a built-in photocell (on at dusk). Not switched or controlled by the Pi. Must sit beside the camera aiming at the scene, never facing the lens. |
+| Second IR illuminator (added 2026-11-19) | Separate unit, much brighter. On a stake up and left of the hole, in frame at top left. Raised the scene from frame mean ~11 to ~75 at the same 66.6 ms / gain 9.85. |
 | 5 V USB power supply for the Pi | Official Raspberry Pi 2.5 A supply (replaced an earlier 2.2 A one). Still check `vcgencmd get_throttled` = `0x0` under load. |
 | CanaKit USB microSD reader | For imaging the card from the PC |
 
@@ -103,6 +104,10 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   incandescent and its colour correction cancels the signal: measured
   2026-11-15 at 66.6 ms / gain 9.85, mean brightness 0.6 with the default
   tuning vs 12.2 with the NoIR tuning, on the same scene.
+- **Retention:** at startup and when the night window opens, unstarred clips
+  older than `keep_nights` (30) are deleted, then oldest nights first until
+  `min_free_gb` (10) is free. Starred clips and tonight are never touched;
+  event rows stay with `clip`/`snapshot` set to NULL.
 - **Clip review:** small web page on the Pi, served on the tailnet only, plus
   an rsync script for archiving starred clips to the PC.
 
@@ -112,7 +117,8 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   is pure Python and NumPy and runs on the PC with `FakeCamera`.
   `config.py` + `config.toml` · `motion.py` (detector) · `recorder.py` (clip
   state machine) · `schedule.py` (astral) · `events.py` (SQLite) ·
-  `triggers.py` (PIR hook) · `main.py` (loop and CLI).
+  `triggers.py` (PIR hook) · `prune.py` (storage cleanup) · `main.py`
+  (loop and CLI).
 - On the Pi: `python3 -m picam` (also `--always-on`, `--dry-run`,
   `--duration S`). On the PC: `python -m picam --fake --always-on`.
 - Tests on the PC: `.venv\Scripts\python -m pytest` (venv from
@@ -162,5 +168,9 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   8 short bursts (10–11 PM busiest), with no lighting changes, so no wind
   false triggers so far. Confirm against clips.
 - Night exposure: AE with frame duration capped at 66.7 ms (15 fps) held
-  66.7 ms / gain 9.85, brightness ~24, all night on 2026-11-16. Looks settled;
-  check the clips are usable.
+  66.7 ms / gain 9.85, brightness ~24, all night on 2026-11-16. With the second
+  illuminator (2026-11-19) the aim.py box reads ~123 and frame ~75, 0.01%
+  clipped, still at 66.6 ms / 9.85. The hole is at about (0.54, 0.50) and sits
+  in the sidewalk edge's shadow (light is high and to the left).
+- Brighter grass may raise wind false triggers: re-check `min_area` with a
+  `--dry-run` night against the 2026-11-16 scores.

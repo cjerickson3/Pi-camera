@@ -60,6 +60,18 @@ class PirConfig:
 
 
 @dataclass(frozen=True)
+class RetentionConfig:
+    keep_nights: int = 30
+    min_free_gb: float = 10.0
+
+
+@dataclass(frozen=True)
+class ReviewConfig:
+    bind: str = "127.0.0.1"
+    port: int = 8080
+
+
+@dataclass(frozen=True)
 class PathsConfig:
     data_dir: str = "~/picam-data"
 
@@ -87,6 +99,8 @@ class Config:
     clips: ClipConfig = ClipConfig()
     schedule: ScheduleConfig = ScheduleConfig()
     pir: PirConfig = PirConfig()
+    retention: RetentionConfig = RetentionConfig()
+    review: ReviewConfig = ReviewConfig()
     paths: PathsConfig = PathsConfig()
 
 
@@ -146,3 +160,6 @@ def _validate(cfg: Config):
     _check(0 <= k.preroll_s <= 30, "[clips] preroll_s must be 0..30")
     _check(k.postroll_s > 0, "[clips] postroll_s must be > 0")
     _check(k.max_clip_s > k.postroll_s, "[clips] max_clip_s must exceed postroll_s")
+    _check(cfg.retention.keep_nights >= 1, "[retention] keep_nights must be >= 1")
+    _check(cfg.retention.min_free_gb >= 0, "[retention] min_free_gb must be >= 0")
+    _check(0 < cfg.review.port < 65536, "[review] port must be 1..65535")

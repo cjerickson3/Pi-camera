@@ -52,5 +52,17 @@ stop_after_sunrise_min = 0
 enabled = false                 # hook for a PIR sensor later (gpiozero MotionSensor)
 gpio_pin = 17                   # BCM numbering
 
+[retention]
+# Pruned at startup and when the night window opens. Starred clips are never
+# deleted; pruned events keep their database row (clip/snapshot set to empty).
+keep_nights = 30                # delete unstarred clips from nights older than this
+min_free_gb = 10                # and then oldest nights first until this much is free
+
+[review]
+# Clip review page (python3 -m picam.review). Localhost only; `tailscale serve`
+# publishes it on the tailnet as http://zero/ (see docs/pi-setup.md).
+bind = "127.0.0.1"
+port = 8080
+
 [paths]
 data_dir = "~/picam-data"
