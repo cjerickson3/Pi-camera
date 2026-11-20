@@ -108,8 +108,12 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   older than `keep_nights` (30) are deleted, then oldest nights first until
   `min_free_gb` (10) is free. Starred clips and tonight are never touched;
   event rows stay with `clip`/`snapshot` set to NULL.
-- **Clip review:** small web page on the Pi, served on the tailnet only, plus
-  an rsync script for archiving starred clips to the PC.
+- **Clip review:** `picam/review.py`, stdlib `http.server` (no Flask) on
+  127.0.0.1:8080 as `picam-review.service`, published by
+  `tailscale serve --http=80` as http://zero/. Star and note are written to
+  `events.db` (both processes use a 10 s busy timeout). `tools/fetch_starred.py`
+  (stdlib, runs on Windows) pulls starred clips plus a JSON sidecar into
+  `archive/` via `/api/starred`, replacing the planned rsync script.
 
 ## Code layout and running
 
@@ -118,15 +122,15 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   `config.py` + `config.toml` · `motion.py` (detector) · `recorder.py` (clip
   state machine) · `schedule.py` (astral) · `events.py` (SQLite) ·
   `triggers.py` (PIR hook) · `prune.py` (storage cleanup) · `main.py`
-  (loop and CLI).
+  (loop and CLI) · `review.py` (review web page, separate process).
 - On the Pi: `python3 -m picam` (also `--always-on`, `--dry-run`,
   `--duration S`). On the PC: `python -m picam --fake --always-on`.
 - Tests on the PC: `.venv\Scripts\python -m pytest` (venv from
   `requirements-dev.txt`). The Pi has no pytest.
 - `deploy/`: `picam.service`, a persistent-journal drop-in (Pi OS defaults to
   a RAM-only journal), a NetworkManager drop-in turning WiFi power save off
-  (it dropped the Zero off Tailscale overnight), and `install.sh` that puts
-  them in place. Run `sudo deploy/install.sh` on the Pi (sudo needs a
+  (it dropped the Zero off Tailscale overnight), `picam-review.service`,
+  and `install.sh` that puts them in place and runs `tailscale serve`. Run `sudo deploy/install.sh` on the Pi (sudo needs a
   password, so Chris runs it). Logs: `journalctl -u picam`.
 - `tools/camera_test.py` (stills and exposure bracket) and `tools/aim.py`
   (live view on :8000 with the detection area drawn) are standalone.

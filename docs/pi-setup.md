@@ -67,7 +67,7 @@ sudo tailscale up
 
 Open the printed URL to add `zero` to your tailnet. Disable key expiry for
 this machine in the Tailscale admin console so it doesn't drop off after 180
-days. The review web page will be served on the tailnet only (Phase 5).
+days. The review web page is served on the tailnet only (step 7).
 
 ## 5. Get the code and run the camera test
 
@@ -119,7 +119,8 @@ sudo deploy/install.sh
 ```
 
 This installs and starts `picam.service` (enabled at boot, restarts on
-failure; the app itself idles outside the night window). It also:
+failure; the app itself idles outside the night window) and
+`picam-review.service` (step 7). It also:
 
 - makes the journal persistent (`/etc/systemd/journald.conf.d/50-persistent.conf`,
   capped at 100 MB), so `journalctl -b -1` works after a crash;
@@ -134,3 +135,34 @@ journalctl -u picam -f              # live log
 systemctl status picam
 git pull && sudo systemctl restart picam   # deploy (re-run install.sh if deploy/ changed)
 ```
+
+## 7. Clip review
+
+`picam-review.service` runs `python3 -m picam.review` on `127.0.0.1:8080`.
+`install.sh` publishes it to the tailnet with `tailscale serve --bg --http=80 8080`,
+so from the PC or phone on Tailscale it is **http://zero/**. Nothing listens
+on the LAN. The first `tailscale serve` on a tailnet may print a link to
+enable Serve in the admin console; open it, then re-run `install.sh`.
+
+- **Nights:** event count, first and last event, and an hourly strip (17:00 to 08:00).
+- **Night:** snapshot grid; "starred only" filter; link to that night's scores CSV.
+- **Event:** clip player (seekable), star, note, prev/next.
+
+Starred clips are never pruned. To archive them on the PC (Windows, stdlib only):
+
+```
+python tools/fetch_starred.py            # -> archive/<night>/ (gitignored)
+```
+
+Each clip gets its snapshot and a `.json` with the event row (times, scores,
+note). Re-running fetches only new stars.
+
+Check or undo the Tailscale side:
+
+```sh
+tailscale serve status
+sudo tailscale serve --http=80 off
+```
+
+To look at a copy of the data on the PC, point a config at it and run
+`python -m picam.review --config copy.toml --bind 127.0.0.1`.

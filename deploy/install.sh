@@ -1,5 +1,6 @@
 #!/bin/sh
-# Install the picam service, persistent journal and WiFi power-save fix.
+# Install the picam and review services, persistent journal, WiFi power-save
+# fix, and publish the review page on the tailnet.
 # Run on the Pi from the repo: sudo deploy/install.sh   (safe to re-run)
 set -eu
 cd "$(dirname "$0")"
@@ -21,10 +22,17 @@ command -v iw >/dev/null || apt-get install -y --no-install-recommends iw
 iw dev wlan0 set power_save off
 iw dev wlan0 get power_save
 
-# Service
+# Services
 install -m 644 picam.service /etc/systemd/system/picam.service
+install -m 644 picam-review.service /etc/systemd/system/picam-review.service
 systemctl daemon-reload
-systemctl enable picam.service
-systemctl restart picam.service
+systemctl enable picam.service picam-review.service
+systemctl restart picam.service picam-review.service
+
+# Review page on the tailnet: http://zero/ -> 127.0.0.1:8080. Persists across
+# reboots. Plain HTTP; tailnet traffic is already encrypted by WireGuard.
+tailscale serve --bg --http=80 8080
+tailscale serve status
+
 sleep 3
-systemctl --no-pager status picam.service | head -15
+systemctl --no-pager status picam.service picam-review.service | grep -E '●|Active:|Main PID' 

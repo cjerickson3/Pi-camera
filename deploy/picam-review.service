@@ -1,0 +1,20 @@
+[Unit]
+Description=Pi-camera clip review page (localhost; published by tailscale serve)
+Documentation=https://github.com/cjerickson3/Pi-camera
+After=network.target
+
+[Service]
+Type=simple
+User=chris
+Group=chris
+WorkingDirectory=/home/chris/Pi-camera
+ExecStart=/usr/bin/python3 -m picam.review
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=10
+# The recorder comes first: the page yields CPU and disk to it.
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

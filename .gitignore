@@ -22,6 +22,7 @@ data/
 *.jpeg
 *.heic
 aiming/
+archive/
 photos/
 
 # Editors / OS
