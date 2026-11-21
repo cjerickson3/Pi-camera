@@ -2,6 +2,10 @@
 # defaults and validation. Unknown keys are an error, so typos fail loudly.
 
 [camera]
+# Which camera: "tapo" (Tapo C120 over RTSP, see [tapo]; since 2026-11-21) or "picam"
+# (Camera Module 2 NoIR on the Zero's CSI port; the settings below are for it). Switching
+# back also needs the picam detection area in [motion].
+source = "tapo"
 tuning = "imx219_noir.json"     # NoIR tuning; the default imx219.json wipes out IR at night
 sensor_mode = [1640, 1232]      # 2x2 binned: full field of view, better low light
 main_size = [1280, 960]         # recorded H.264 stream
@@ -23,18 +27,44 @@ min_area = 0.01
 min_neighbours = 4
 background_alpha = 0.05         # how fast the background adapts (per frame)
 lighting_change = 0.5           # >50% of the whole frame changing at once = lighting, not motion
-warmup_frames = 30              # frames to learn the background after (re)start
+# Also lighting: the frame's mean brightness moving >15% from the background's. Catches a
+# lamp that lights the grass but not the dark sidewalk (illuminator off at dawn 2026-11-20
+# 06:43: 96 -> 57, under half the frame changed, and it scored ~0.6 for 12 s).
+brightness_jump = 0.15
+# Frames to learn the background after start or a lighting change. The background follows
+# the scene during warm-up, which restarts while brightness still moves >3%/frame
+# (brightness_jump / 5), e.g. AE settling at start (18:22 nightly scored ~0.7 for 17 s).
+warmup_frames = 30
 trigger_frames = 3              # consecutive motion frames needed to start a clip
 
 # Detection area as [x0, y0, x1, y1] fractions of the frame (0,0 = top left).
 # Motion is only counted inside `include` and outside `exclude`.
 # Check placement with: python3 tools/aim.py (rectangles are drawn on the view).
-# 2026-11-16: the hole is against the sidewalk edge ~1" left of the ruler, at
-# about (0.52-0.56, 0.42-0.47). The area is a ~12" x 10" patch around it: the
-# hole, the trimmed grass in front, and a strip of sidewalk edge. Most of the
-# sidewalk and the dark lawn are left out.
-include = [[0.40, 0.33, 0.72, 0.60]]
+# Tapo C120, 2026-11-21: on a pole 1 ft from the hole horizontally, 2 ft up, looking
+# straight down at it. Sidewalk on the left, the mulch strip along its edge, lawn on the
+# right. The hole is the dark gap in the mulch at about (0.50-0.55, 0.35-0.50). The area
+# is the sidewalk edge, the mulch strip and the near grass. The camera's burned-in clock
+# (top left, changes every second) is outside it.
+include = [[0.40, 0.12, 0.70, 0.88]]
 exclude = []
+# Pi camera (source = "picam"), 2026-11-16: hole against the sidewalk edge ~1" left of the
+# ruler at about (0.52-0.56, 0.42-0.47); a ~12" x 10" patch around it:
+# include = [[0.40, 0.33, 0.72, 0.60]]
+
+[tapo]
+# Tapo C120 over RTSP (Advanced Settings > Camera Account in the Tapo app). The IP, user
+# and password are in .env (TAPO_HOST, TAPO_USER, TAPO_PASSWORD), never in this file.
+port = 554
+motion_stream = "stream2"       # 640x360 H.264, 20 fps: decoded for motion detection
+record_stream = "stream1"       # 2560x1440 H.264: copied into clips without re-encoding (ffmpeg)
+motion_size = [320, 180]        # stream2 scaled to this for the detector
+detect_fps = 10                 # frames/s given to the detector (stream2 is decoded in full)
+# stream1 is cut into pieces of about this length (at keyframes, every ~2 s on the C120)
+# in ring_dir (RAM). Clips are made from these pieces, so their ends round out to them.
+segment_s = 2
+ring_dir = "/dev/shm/picam-tapo"
+stall_s = 10                    # no data for this long = connection lost: reconnect
+ffmpeg = "ffmpeg"
 
 [clips]
 preroll_s = 5
@@ -46,7 +76,7 @@ latitude = 33.02
 longitude = -96.70
 timezone = "America/Chicago"
 start_after_sunset_min = 60
-stop_after_sunrise_min = 0
+stop_after_sunrise_min = -30    # negative = before sunrise; dawn light is not IR footage
 
 [pir]
 enabled = false                 # hook for a PIR sensor later (gpiozero MotionSensor)

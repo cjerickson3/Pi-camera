@@ -11,8 +11,11 @@ camera, light and focus:
     python3 tools/aim.py                    # auto exposure, capped at 15 fps like the app
     python3 tools/aim.py --exposure 66      # fixed 66 ms at --gain (default 8)
     python3 tools/aim.py --port 8080
+    python3 tools/aim.py --tapo             # Tapo C120: its motion stream (login from .env)
 
-Ctrl-C to stop. Holds the camera, so stop it before running camera_test.py.
+Ctrl-C to stop. With the Pi camera it holds the camera, so stop picam (and
+camera_test.py) first. With --tapo it is one more RTSP client and can run
+alongside picam.
 Standalone, like camera_test.py; not part of the app's hardware layer.
 """
 
@@ -27,7 +30,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import numpy as np
-from picamera2 import Picamera2
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from picam import config as picam_config  # noqa: E402
@@ -111,7 +113,7 @@ def sharpness(gray: np.ndarray) -> float:
     return float(lap.var())
 
 
-def capture_loop(picam2: Picamera2, latest: Latest, interval: float, stop: threading.Event):
+def capture_loop(picam2, latest: Latest, interval: float, stop: threading.Event):
     frame = 0
     while not stop.is_set():
         t0 = time.monotonic()
@@ -121,23 +123,53 @@ def capture_loop(picam2: Picamera2, latest: Latest, interval: float, stop: threa
             md = req.get_metadata()
         finally:
             req.release()
-        gray = np.asarray(image.convert("L"))
-        h, w = gray.shape
-        bh, bw = int(h * BOX_FRAC), int(w * BOX_FRAC)
-        box = gray[(h - bh) // 2:(h + bh) // 2, (w - bw) // 2:(w + bw) // 2]
         buf = io.BytesIO()
         image.save(buf, "JPEG", quality=80)
         frame += 1
-        latest.set(buf.getvalue(), {
-            "frame": frame,
-            "exposure_ms": round(md.get("ExposureTime", 0) / 1000, 1),
-            "gain": round(md.get("AnalogueGain", 0), 2),
-            "mean": round(float(gray.mean()), 1),
-            "box_mean": round(float(box.mean()), 1),
-            "clipped_pct": round(float((gray >= 250).mean() * 100), 2),
-            "sharpness": round(sharpness(gray), 1),
-        })
+        latest.set(buf.getvalue(), frame_stats(
+            np.asarray(image.convert("L")), frame,
+            round(md.get("ExposureTime", 0) / 1000, 1), round(md.get("AnalogueGain", 0), 2)))
         stop.wait(max(0.0, interval - (time.monotonic() - t0)))
+
+
+def frame_stats(gray: np.ndarray, frame: int, exposure_ms: float = 0.0, gain: float = 0.0) -> dict:
+    h, w = gray.shape
+    bh, bw = int(h * BOX_FRAC), int(w * BOX_FRAC)
+    box = gray[(h - bh) // 2:(h + bh) // 2, (w - bw) // 2:(w + bw) // 2]
+    return {
+        "frame": frame, "exposure_ms": exposure_ms, "gain": gain,
+        "mean": round(float(gray.mean()), 1),
+        "box_mean": round(float(box.mean()), 1),
+        "clipped_pct": round(float((gray >= 250).mean() * 100), 2),
+        "sharpness": round(sharpness(gray), 1),
+    }
+
+
+def tapo_loop(cfg, latest: Latest, interval: float, stop: threading.Event):
+    """Decode the Tapo motion stream; every `interval` s publish the newest frame. Reconnects."""
+    import av
+    from picam.tapo import redact, rtsp_url
+    url = rtsp_url(picam_config.tapo_login(), cfg.tapo.port, cfg.tapo.motion_stream)
+    frame = 0
+    while not stop.is_set():
+        try:
+            with av.open(url, options={"rtsp_transport": "tcp"}, timeout=(10.0, 5.0)) as c:
+                print(f"connected: {redact(url)}")
+                last = 0.0
+                for fr in c.decode(video=0):
+                    if stop.is_set():
+                        return
+                    if time.monotonic() - last < interval:
+                        continue
+                    last = time.monotonic()
+                    image = fr.to_image()
+                    buf = io.BytesIO()
+                    image.save(buf, "JPEG", quality=85)
+                    frame += 1
+                    latest.set(buf.getvalue(), frame_stats(np.asarray(image.convert("L")), frame))
+        except Exception as e:
+            print(f"stream: {e}; retrying", file=sys.stderr)
+        stop.wait(2)
 
 
 def area_divs(cfg) -> str:
@@ -195,8 +227,17 @@ def main() -> int:
     ap.add_argument("--gain", type=float, default=8.0, help="analogue gain with --exposure")
     ap.add_argument("--config", type=Path, default=picam_config.DEFAULT_PATH,
                     help="draw this config's motion detection area")
+    ap.add_argument("--tapo", action="store_true", help="Tapo camera ([tapo] in config, login in .env)")
     args = ap.parse_args()
-    page = PAGE.replace("<!--AREAS-->", area_divs(picam_config.load(args.config)))
+    cfg = picam_config.load(args.config)
+    page = PAGE.replace("<!--AREAS-->", area_divs(cfg))
+    latest = Latest()
+    stop = threading.Event()
+    if args.tapo:
+        threading.Thread(target=tapo_loop, args=(cfg, latest, args.interval, stop), daemon=True).start()
+        return serve(latest, page, args.port, stop, lambda: None)
+
+    from picamera2 import Picamera2
 
     # The default imx219.json tuning's AWB/CCM wipes out IR at night (mean 0.6 vs 12).
     picam2 = Picamera2(tuning=Picamera2.load_tuning_file(TUNING))
@@ -211,17 +252,17 @@ def main() -> int:
         main={"size": VIEW_SIZE, "format": "RGB888"}, raw={"size": SENSOR_MODE},
         controls=controls, buffer_count=3))
     picam2.start()
-
-    latest = Latest()
-    stop = threading.Event()
     threading.Thread(target=capture_loop, args=(picam2, latest, args.interval, stop),
                      daemon=True).start()
+    return serve(latest, page, args.port, stop, picam2.stop)
 
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(latest, page))
+
+def serve(latest: Latest, page: str, port: int, stop: threading.Event, cleanup) -> int:
+    server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(latest, page))
     print("Aim view running. Open one of these on your phone:")
-    for u in urls(args.port):
+    for u in urls(port):
         print(f"  {u}")
-    print(f"  http://zero:{args.port}/   (Tailscale MagicDNS)")
+    print(f"  http://zero:{port}/   (Tailscale MagicDNS)")
     print("Ctrl-C to stop.")
     try:
         server.serve_forever()
@@ -230,7 +271,7 @@ def main() -> int:
     finally:
         stop.set()
         server.server_close()
-        picam2.stop()
+        cleanup()
     return 0
 
 

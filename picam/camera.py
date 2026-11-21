@@ -1,6 +1,7 @@
 """Camera access. The only module that touches picamera2.
 
 PiCamera: real hardware (imported lazily so the rest runs on the PC).
+TapoCamera (tapo.py): an RTSP camera over WiFi.
 FakeCamera: synthetic frames for tests and for running the app on the PC.
 """
 
@@ -16,6 +17,11 @@ from typing import Callable, Iterator, Protocol
 import numpy as np
 
 from .config import CameraConfig
+
+
+class NoFrame(Exception):
+    """frame() gave up waiting (e.g. a network camera dropped off). The main loop closes any
+    open event and carries on; the camera keeps reconnecting on its own."""
 
 
 class Frame(Protocol):

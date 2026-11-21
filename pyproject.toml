@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Night burrow camera on a Raspberry Pi Zero 2 W"
 requires-python = ">=3.11"
 # On the Pi these come from apt: python3-picamera2 python3-av python3-numpy
-# python3-pil python3-astral (python3-gpiozero only if [pir] is enabled).
+# python3-pil python3-astral, plus ffmpeg for the Tapo camera ([camera] source =
+# "tapo"). python3-gpiozero only if [pir] is enabled.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

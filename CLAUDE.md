@@ -23,7 +23,8 @@ The camera's job:
 |---|---|
 | Raspberry Pi Zero 2 W, in a case | Quad-core, 512 MB RAM. Keep the software light. |
 | 128 GB high-endurance microSD | Holds OS, clips, and the event database |
-| Camera Module 2 NoIR (IMX219, 8 MP) | No IR filter, for night viewing. Fixed focus. Pi Zero camera cable. |
+| TP-Link Tapo C120 (since 2026-11-21) | **The camera in use.** WiFi, own IR. On a pole where the old IR light stood: 1 ft from the hole horizontally, 2 ft up, looking straight down at it. RTSP: `stream1` 2560x1440 H.264 20 fps (~0.8 Mbps by day), `stream2` 640x360 H.264 20 fps; keyframes every ~2 s; audio pcm_alaw (not recorded). ONVIF on port 2020. Login in `.env`. Burns a clock into the top left of the frame. Its own zones/motion alerts are not used. |
+| Camera Module 2 NoIR (IMX219, 8 MP) | Retired 2026-11-21 (the Zero is moving out of the front yard). Still attached; code path kept (`[camera] source = "picam"`). No IR filter. Fixed focus. Pi Zero camera cable. |
 | 12 V IR illuminator | **850 nm** (faint red glow visible on the LEDs). Small grey dome. Has its own 12 V supply and a built-in photocell (on at dusk). Not switched or controlled by the Pi. Must sit beside the camera aiming at the scene, never facing the lens. |
 | Second IR illuminator (added 2026-11-19) | Separate unit, much brighter. On a stake up and left of the hole, in frame at top left. Raised the scene from frame mean ~11 to ~75 at the same 66.6 ms / gain 9.85. |
 | 5 V USB power supply for the Pi | Official Raspberry Pi 2.5 A supply (replaced an earlier 2.2 A one). Still check `vcgencmd get_throttled` = `0x0` under load. |
@@ -74,10 +75,21 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 - **Camera to burrow distance:** about 2.5 ft (0.76 m). That is a little
   closer than the lens's stock near limit (~1 m), so expect to adjust focus
   with `camera_test.py --focus`.
-- **Recording window:** one hour after sunset until sunrise, computed for
+- **Recording window:** one hour after sunset until 30 min before sunrise
+  (`stop_after_sunrise_min = -30`, set 2026-11-20: the illuminator switched off
+  at 06:43 on 11-20 and dawn light is not IR footage), computed for
   Plano, TX (approx. 33.02 N, 96.70 W) with `python3-astral`. The illuminator
   has its own photocell, so the Pi does not detect night itself. Outside the
   window the camera is stopped entirely (no daytime clips).
+- **Lighting vs motion (2026-11-20):** a frame is a lighting change (background
+  relearned, no motion) if >50% of it changed or its mean brightness moved
+  >`brightness_jump` (15%) from the background's. During warm-up the background
+  copies each frame, and warm-up restarts while brightness moves >3%/frame. This
+  removed the nightly 18:22 start trigger (AE settling) and the dawn lamp-off
+  trigger. Do not add a per-frame brightness-rate rule after warm-up: the 11-20
+  rabbit moved the frame mean 3.4% in one frame. Changes to the detector are
+  checked by replaying real clips through old and new code on the Pi (PyAV is
+  there, not on the PC).
 - **Clips:** 5 s pre-roll, 5 s post-roll, 60 s cap (cap may come down later).
   Trigger needs 3 consecutive motion frames.
 - **Data location on the Pi:** `~/picam-data/` holds `clips/<night>/`
@@ -87,7 +99,19 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   sidewalk**. Zones per hole are no longer needed; a single optional ROI mask
   in config is enough. During setup a 12" ruler stands just right of the hole
   for scale.
-- **Aim (set 2026-11-16):** camera on a tripod ~1 m from the hole, looking
+- **Camera (2026-11-21): Tapo C120 replaces the Pi camera.** The Zero stays
+  as the recorder (it can now sit anywhere with WiFi to the camera).
+  `TapoCamera` (`picam/tapo.py`) plugs into the same `Camera` interface, so
+  detector, recorder, events, pruning and review are shared; `[camera] source`
+  picks it. Motion: PyAV decodes stream2, 10 fps to the detector at 320x180.
+  Clips: ffmpeg copies stream1 (no re-encode) into ~2 s MPEG-TS pieces in
+  `/dev/shm/picam-tapo`; a clip is the pieces from `preroll_s` before the
+  trigger to the end, joined with `-c copy` into the MP4 once the end piece has
+  closed (edges round out to keyframes). Each connection reconnects on its own
+  with backoff; `frame()` raises `NoFrame` after `stall_s`, and the app then
+  closes any open event and resets the detector. Measured 2026-11-21: motion
+  process ~17% of one core, 86 MB.
+- **Aim (Pi camera, set 2026-11-16):** camera on a tripod ~1 m from the hole, looking
   down at the sidewalk edge. The hole (~2" across, against the sidewalk, ~1"
   left of the ruler) sits at about (0.54, 0.45) of the frame. Grass around it
   was trimmed so the hole is visible. Detection area in `config.toml` is a
@@ -117,8 +141,10 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Code layout and running
 
-- `picam/`: the app. Only `camera.py` touches picamera2 (`PiCamera`); the rest
-  is pure Python and NumPy and runs on the PC with `FakeCamera`.
+- `picam/`: the app. Only `camera.py` touches picamera2 (`PiCamera`) and only
+  `tapo.py` touches RTSP/ffmpeg (`TapoCamera`); the rest is pure Python and
+  NumPy and runs on the PC with `FakeCamera`. Tapo login: `.env` (see
+  `.env.example`), read by `config.tapo_login()`.
   `config.py` + `config.toml` · `motion.py` (detector) · `recorder.py` (clip
   state machine) · `schedule.py` (astral) · `events.py` (SQLite) ·
   `triggers.py` (PIR hook) · `prune.py` (storage cleanup) · `main.py`
@@ -133,7 +159,9 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   and `install.sh` that puts them in place and runs `tailscale serve`. Run `sudo deploy/install.sh` on the Pi (sudo needs a
   password, so Chris runs it). Logs: `journalctl -u picam`.
 - `tools/camera_test.py` (stills and exposure bracket) and `tools/aim.py`
-  (live view on :8000 with the detection area drawn) are standalone.
+  (live view on :8000 with the detection area drawn; `--tapo` for the C120)
+  are standalone.
+- The Pi needs `ffmpeg` from apt for the Tapo (`install.sh` installs it).
 - **picamera2 gotcha:** `CircularOutput2` (picamera2 0.3.39) is a delay line,
   not a dump-on-open buffer. Frames reach the open file only once they are
   `preroll_s` old, so `PiCamera.stop_clip()` closes the file `preroll_s`
@@ -167,6 +195,20 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
 
 ## Open questions
 
+- **Tapo tuning (from 2026-11-21):** detection area `[0.40, 0.12, 0.70, 0.88]`
+  is a first guess from one daytime frame (hole at about (0.50-0.55,
+  0.35-0.50)); check it at night with `tools/aim.py --tapo`. `min_area` 0.01 is
+  carried over from the Pi camera. At this range grass blades are large, so wind
+  may trigger more: watch the scores. Turning off the Tapo's on-screen clock
+  would remove a changing patch from every frame.
+- The Zero hard-reset at ~16:47 on 2026-11-21 (no shutdown in the journal, no
+  OOM, `get_throttled` 0x0 after). Files written just before it came back as
+  zeros: run `sync` after copying anything important to the Pi.
+- **First sighting, 2026-11-20 06:14:** event 45 (`20261120-061359.mp4`) shows
+  a rabbit (looks like a cottontail) at the hole, 38 s. Not a rat. Cottontails
+  don't usually dig burrows like this; keep watching for what actually digs. The
+  19:22–19:25 events on 11-19 were the second illuminator being installed, and the
+  Pi rebooted uncleanly at 19:33 (power re-plugged, presumably).
 - Sensitivity: `min_area` 0.01 and the 2026-11-16 detection area. The
   2026-11-16 `--dry-run` night (19:44–06:59) scored 0 every second except
   8 short bursts (10–11 PM busiest), with no lighting changes, so no wind

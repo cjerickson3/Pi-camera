@@ -22,6 +22,9 @@ command -v iw >/dev/null || apt-get install -y --no-install-recommends iw
 iw dev wlan0 set power_save off
 iw dev wlan0 get power_save
 
+# ffmpeg records the Tapo camera's stream ([camera] source = "tapo")
+command -v ffmpeg >/dev/null || apt-get install -y --no-install-recommends ffmpeg
+
 # Services
 install -m 644 picam.service /etc/systemd/system/picam.service
 install -m 644 picam-review.service /etc/systemd/system/picam-review.service

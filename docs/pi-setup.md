@@ -39,7 +39,7 @@ and on the camera they face the camera board. Push the latch in fully.
 ```sh
 ssh zero
 sudo apt update && sudo apt full-upgrade -y
-sudo apt install -y --no-install-recommends python3-picamera2 python3-av python3-pil git
+sudo apt install -y --no-install-recommends python3-picamera2 python3-av python3-pil git ffmpeg ffmpeg
 rpicam-hello --list-cameras        # expect: imx219 [3280x2464]
 vcgencmd get_throttled             # expect: throttled=0x0
 ```

@@ -20,7 +20,7 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from .camera import Camera, Frame
+from .camera import Camera, Frame, NoFrame
 from .config import DEFAULT_PATH, Config, load as load_config
 from .events import Event, EventLog
 from .motion import MotionDetector, MotionResult
@@ -132,13 +132,14 @@ class App:
         self.now = now
         self.dry_run = dry_run
         self.triggers = list(triggers)
-        w, h = cfg.camera.lores_size
+        w, h = cfg.motion_size
         self.detector = MotionDetector(cfg.motion, (h, w))
         self.scores = ScoreLog(cfg.paths.scores_dir)
         self._new_recorder()
         self._running = False
         self._event: _OpenEvent | None = None
         self._last_t = 0.0
+        self._no_frames_since: float | None = None
 
     def _new_recorder(self):
         c = self.cfg
@@ -156,13 +157,31 @@ class App:
                     continue
                 if not self._running:
                     self._go_active(wall)
-                with self.camera.frame() as f:
-                    self._process(f, self.now())
+                try:
+                    with self.camera.frame() as f:
+                        self._process(f, self.now())
+                except NoFrame as e:
+                    self._lost_frames(e)
+                    continue
+                if self._no_frames_since is not None:
+                    log.info("frames back after %.0f s", time.monotonic() - self._no_frames_since)
+                    self._no_frames_since = None
                 frames += 1
         finally:
             self._go_idle(self.now())
             self.scores.close()
         return frames
+
+    def _lost_frames(self, e: NoFrame):
+        """The camera stopped delivering (WiFi camera dropped). Close any open event with what
+        was recorded, and start the background over when frames return."""
+        if self._no_frames_since is None:
+            self._no_frames_since = time.monotonic()
+            log.warning("%s; waiting for the camera to reconnect", e)
+        if self._event is not None:
+            self.recorder.stop()
+            self._finish_event(self._last_t, self.now())
+        self.detector.reset()
 
     def _go_active(self, wall: datetime):
         self._prune(wall)
@@ -290,8 +309,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     schedule = NightSchedule(cfg.schedule, always_on=args.always_on)
     if args.fake:
         from .camera import FakeCamera, moving_square_scene
-        camera = FakeCamera(cfg.camera, moving_square_scene(cfg.camera.lores_size, 10, 12, period=30),
+        camera = FakeCamera(cfg.camera, moving_square_scene(cfg.motion_size, 10, 12, period=30),
                             realtime=True)
+    elif cfg.camera.source == "tapo":
+        from .config import tapo_login
+        from .tapo import TapoCamera
+        camera = TapoCamera(cfg.tapo, tapo_login(), cfg.clips.preroll_s, cfg.clips.max_clip_s)
     else:
         from .camera import PiCamera
         camera = PiCamera(cfg.camera, cfg.clips.preroll_s)
@@ -306,7 +329,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         timer.daemon = True
         timer.start()
 
-    log.info("picam starting: data in %s", cfg.paths.root)
+    log.info("picam starting: %s camera, data in %s", "fake" if args.fake else cfg.camera.source,
+             cfg.paths.root)
     app = App(cfg, camera, schedule, events, now=schedule.now, dry_run=args.dry_run, triggers=triggers)
     try:
         app.run(stop)

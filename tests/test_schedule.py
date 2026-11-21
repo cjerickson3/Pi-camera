@@ -21,7 +21,8 @@ def at(*args):
     (at(2026, 11, 16, 18, 45), True),
     (at(2026, 11, 16, 23, 59), True),
     (at(2026, 11, 17, 3, 0), True),
-    (at(2026, 11, 17, 6, 50), True),
+    (at(2026, 11, 17, 6, 20), True),
+    (at(2026, 11, 17, 6, 45), False),   # stop 30 min before sunrise
     (at(2026, 11, 17, 7, 30), False),
     # DST starts 2026-03-08 02:00; night of Mar 7 -> 8 (sunrise ~07:50 CDT)
     (at(2026, 3, 8, 3, 30), True),
@@ -34,7 +35,7 @@ def test_is_active(when, active):
 def test_window_bounds():
     start, end = S.window(at(2026, 11, 16).date())
     assert at(2026, 11, 16, 18, 15) < start < at(2026, 11, 16, 18, 35)
-    assert at(2026, 11, 17, 6, 55) < end < at(2026, 11, 17, 7, 15)
+    assert at(2026, 11, 17, 6, 25) < end < at(2026, 11, 17, 6, 45)   # sunrise ~07:04 - 30 min
 
 
 def test_next_change():
@@ -51,3 +52,4 @@ def test_night_label_spans_midnight():
 
 def test_always_on():
     assert NightSchedule(ScheduleConfig(), always_on=True).is_active(at(2026, 11, 16, 12, 0))
+
