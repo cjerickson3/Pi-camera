@@ -160,7 +160,10 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   `requirements-dev.txt`). The Pi has no pytest.
 - `deploy/`: `picam.service`, a persistent-journal drop-in (Pi OS defaults to
   a RAM-only journal), a NetworkManager drop-in turning WiFi power save off
-  (it dropped the Zero off Tailscale overnight), `picam-review.service`,
+  (it dropped the Zero off Tailscale overnight), a logind drop-in with
+  `RemoveIPC=no` (otherwise logging out of SSH deletes chris's `/dev/shm`
+  files, i.e. the Tapo ring; `/run` at 84 MB is too small to hold it instead),
+  `picam-review.service`,
   and `install.sh` that puts them in place and runs `tailscale serve`. Run `sudo deploy/install.sh` on the Pi (sudo needs a
   password, so Chris runs it). Logs: `journalctl -u picam`.
 - `tools/camera_test.py` (stills and exposure bracket) and `tools/aim.py`
@@ -205,6 +208,13 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   0.35-0.50)); check it at night with `tools/aim.py --tapo`. `min_area` 0.01 is
   carried over from the Pi camera. At this range grass blades are large, so wind
   may trigger more: watch the scores.
+- **Night of 2026-11-21: no clips.** At 19:03 the last SSH logout wiped
+  `/dev/shm/picam-tapo` (logind RemoveIPC). ffmpeg's error line then crashed
+  `redact()` (`[segment @ 0x…]` has an `@` and no URL), and the record thread
+  died. 14 events have snapshots only (19:44 to 05:47, a cluster 05:38–05:47).
+  Fixed 2026-11-22: regex `redact`, ring dir recreated on every ffmpeg start,
+  watcher errors retried, logind drop-in. The Tapo clip path is still unproven
+  at night.
 - The Zero hard-reset at ~16:47 on 2026-11-21 (no shutdown in the journal, no
   OOM, `get_throttled` 0x0 after). Files written just before it came back as
   zeros: run `sync` after copying anything important to the Pi.

@@ -21,6 +21,7 @@ loop can close an open event and keep checking the schedule while this reconnect
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import threading
 import time
@@ -47,12 +48,14 @@ def rtsp_url(login: TapoLogin, port: int, stream: str) -> str:
     return f"rtsp://{quote(login.user, safe='')}:{quote(login.password, safe='')}@{login.host}:{port}/{stream}"
 
 
-def redact(url: str) -> str:
-    """URL without the login, for logs."""
-    if "@" not in url:
-        return url
-    scheme, rest = url.split("://", 1)
-    return f"{scheme}://***@{rest.rsplit('@', 1)[1]}"
+_LOGIN = re.compile(r"([a-z][a-z0-9+.-]*://)[^\s/@]+@", re.I)
+
+
+def redact(text: str) -> str:
+    """Text (a URL or an ffmpeg log line) with any URL login replaced by ***. Never raises:
+    ffmpeg lines like "[segment @ 0x55...]" have an @ and no URL. rtsp_url() quotes the
+    login, so it holds no /, @ or whitespace."""
+    return _LOGIN.sub(lambda m: m.group(1) + '***@', text)
 
 
 # --- segment ring: pure file bookkeeping, no ffmpeg ------------------------------
@@ -299,6 +302,9 @@ class TapoCamera:
                 started = time.monotonic()
                 errors: deque[str] = deque(maxlen=5)
                 try:
+                    # Recreated every time: logind's RemoveIPC wipes the user's /dev/shm files
+                    # when their last login ends (2026-11-21, it cost a night of clips).
+                    ring.mkdir(parents=True, exist_ok=True)
                     self._ffmpeg = subprocess.Popen(
                         ffmpeg_segment_cmd(self.cfg.ffmpeg, self._record_url, ring, self.cfg.segment_s),
                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -308,7 +314,12 @@ class TapoCamera:
                     threading.Thread(target=_drain, args=(self._ffmpeg.stderr, errors),
                                      name="tapo-ffmpeg-stderr", daemon=True).start()
                     log.info("recording stream: ffmpeg started (%s)", redact(self._record_url))
-                    reason = self._watch_ffmpeg(started)
+                    try:
+                        reason = self._watch_ffmpeg(started)
+                    except Exception as e:    # a bug here must not end recording for the night
+                        log.exception("recording stream watcher failed")
+                        self._kill_ffmpeg()
+                        reason = f"watcher failed ({e})"
                 if self._stop.is_set():
                     break
                 if errors:
@@ -333,7 +344,10 @@ class TapoCamera:
             if p.poll() is not None:
                 return f"ffmpeg exited ({p.returncode})"
             segs = list_segments(Path(self.cfg.ring_dir))
-            newest = segs[-1].path.stat().st_mtime if segs else None
+            try:
+                newest = segs[-1].path.stat().st_mtime if segs else None
+            except FileNotFoundError:     # trimmed or wiped since listing
+                newest = None
             idle = time.time() - newest if newest else time.monotonic() - started
             if idle > self.cfg.stall_s:
                 self._kill_ffmpeg()
@@ -366,7 +380,7 @@ class TapoCamera:
 def _drain(pipe, keep: deque):
     """Read ffmpeg's stderr so it can never fill the pipe and block ffmpeg; keep the last lines."""
     for raw in pipe:
-        line = raw.decode(errors="replace").strip()
+        line = redact(raw.decode(errors="replace").strip())
         if line:
             keep.append(line)
-            log.debug("ffmpeg: %s", redact(line))
+            log.debug("ffmpeg: %s", line)

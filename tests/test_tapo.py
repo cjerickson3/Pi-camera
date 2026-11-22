@@ -38,6 +38,10 @@ def test_url_quotes_login_and_redacts():
     assert redact(url) == "rtsp://***@10.0.0.3:554/stream1"
     assert redact("connection to rtsp://a:b@h:554/s refused").count("***") == 1
     assert "p%40ss" not in redact(url)
+    # ffmpeg log lines: an @ but no URL (this raised and killed recording on 2026-11-21)
+    line = "[segment @ 0x55d0c8a2c0] Failed to open segment '/dev/shm/picam-tapo/seg-1.ts'"
+    assert redact(line) == line
+    assert redact("[rtsp @ 0x1] rtsp://u:p@h/s: 401 Unauthorized") == "[rtsp @ 0x1] rtsp://***@h/s: 401 Unauthorized"
 
 
 def test_list_segments_orders_and_marks_newest_open(tmp_path):

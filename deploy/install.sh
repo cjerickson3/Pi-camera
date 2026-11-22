@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install the picam and review services, persistent journal, WiFi power-save
-# fix, and publish the review page on the tailnet.
+# fix, logind RemoveIPC=no, and publish the review page on the tailnet.
 # Run on the Pi from the repo: sudo deploy/install.sh   (safe to re-run)
 set -eu
 cd "$(dirname "$0")"
@@ -21,6 +21,12 @@ install -m 644 wifi-powersave-off.conf /etc/NetworkManager/conf.d/wifi-powersave
 command -v iw >/dev/null || apt-get install -y --no-install-recommends iw
 iw dev wlan0 set power_save off
 iw dev wlan0 get power_save
+
+# Keep /dev/shm (the Tapo segment ring) when chris logs out. logind re-reads its
+# config on restart; existing sessions survive it.
+install -d /etc/systemd/logind.conf.d
+install -m 644 logind-keep-ipc.conf /etc/systemd/logind.conf.d/50-keep-ipc.conf
+systemctl restart systemd-logind
 
 # ffmpeg records the Tapo camera's stream ([camera] source = "tapo")
 command -v ffmpeg >/dev/null || apt-get install -y --no-install-recommends ffmpeg
