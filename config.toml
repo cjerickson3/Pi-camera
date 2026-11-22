@@ -43,8 +43,8 @@ trigger_frames = 3              # consecutive motion frames needed to start a cl
 # Tapo C120, 2026-11-21: on a pole 1 ft from the hole horizontally, 2 ft up, looking
 # straight down at it. Sidewalk on the left, the mulch strip along its edge, lawn on the
 # right. The hole is the dark gap in the mulch at about (0.50-0.55, 0.35-0.50). The area
-# is the sidewalk edge, the mulch strip and the near grass. The camera's burned-in clock
-# (top left, changes every second) is outside it.
+# is the sidewalk edge, the mulch strip and the near grass. (The camera's clock overlay is
+# off; it was top left, outside the area.)
 include = [[0.40, 0.12, 0.70, 0.88]]
 exclude = []
 # Pi camera (source = "picam"), 2026-11-16: hole against the sidewalk edge ~1" left of the

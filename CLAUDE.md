@@ -23,7 +23,7 @@ The camera's job:
 |---|---|
 | Raspberry Pi Zero 2 W, in a case | Quad-core, 512 MB RAM. Keep the software light. |
 | 128 GB high-endurance microSD | Holds OS, clips, and the event database |
-| TP-Link Tapo C120 (since 2026-11-21) | **The camera in use.** WiFi, own IR. On a pole where the old IR light stood: 1 ft from the hole horizontally, 2 ft up, looking straight down at it. RTSP: `stream1` 2560x1440 H.264 20 fps (~0.8 Mbps by day), `stream2` 640x360 H.264 20 fps; keyframes every ~2 s; audio pcm_alaw (not recorded). ONVIF on port 2020. Login in `.env`. Burns a clock into the top left of the frame. Its own zones/motion alerts are not used. |
+| TP-Link Tapo C120 (since 2026-11-21) | **The camera in use.** WiFi, own IR. On a pole where the old IR light stood: 1 ft from the hole horizontally, 2 ft up, looking straight down at it. RTSP: `stream1` 2560x1440 H.264 20 fps (~0.8 Mbps by day), `stream2` 640x360 H.264 20 fps; keyframes every ~2 s; audio pcm_alaw (not recorded). ONVIF on port 2020. Login in `.env`. On-screen clock overlay turned off (2026-11-21). Its own zones/motion alerts are not used. |
 | Camera Module 2 NoIR (IMX219, 8 MP) | Retired 2026-11-21 (the Zero is moving out of the front yard). Still attached; code path kept (`[camera] source = "picam"`). No IR filter. Fixed focus. Pi Zero camera cable. |
 | 12 V IR illuminator | **850 nm** (faint red glow visible on the LEDs). Small grey dome. Has its own 12 V supply and a built-in photocell (on at dusk). Not switched or controlled by the Pi. Must sit beside the camera aiming at the scene, never facing the lens. |
 | Second IR illuminator (added 2026-11-19) | Separate unit, much brighter. On a stake up and left of the hole, in frame at top left. Raised the scene from frame mean ~11 to ~75 at the same 66.6 ms / gain 9.85. |
@@ -89,7 +89,12 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   trigger. Do not add a per-frame brightness-rate rule after warm-up: the 11-20
   rabbit moved the frame mean 3.4% in one frame. Changes to the detector are
   checked by replaying real clips through old and new code on the Pi (PyAV is
-  there, not on the PC).
+  there, not on the PC). Replay of all 88 clips (2026-11-21): 79 unchanged (rabbit
+  included), headlight sweeps and the 11-21 dawn lamp-off now lighting, but on
+  the dim pre-illuminator nights (mean ~10) encoder flicker exceeded 3%/frame and
+  kept warm-up restarting, blind for most of each clip. Fixed with absolute
+  floors (`JUMP_FLOOR` 3 luma, `SETTLE_FLOOR` 1 luma in `motion.py`) and a cap
+  of 4x `warmup_frames` on warm-up.
 - **Clips:** 5 s pre-roll, 5 s post-roll, 60 s cap (cap may come down later).
   Trigger needs 3 consecutive motion frames.
 - **Data location on the Pi:** `~/picam-data/` holds `clips/<night>/`
@@ -199,8 +204,7 @@ camera. Leave a clean hook for adding a PIR on a GPIO pin later.
   is a first guess from one daytime frame (hole at about (0.50-0.55,
   0.35-0.50)); check it at night with `tools/aim.py --tapo`. `min_area` 0.01 is
   carried over from the Pi camera. At this range grass blades are large, so wind
-  may trigger more: watch the scores. Turning off the Tapo's on-screen clock
-  would remove a changing patch from every frame.
+  may trigger more: watch the scores.
 - The Zero hard-reset at ~16:47 on 2026-11-21 (no shutdown in the journal, no
   OOM, `get_throttled` 0x0 after). Files written just before it came back as
   zeros: run `sync` after copying anything important to the Pi.

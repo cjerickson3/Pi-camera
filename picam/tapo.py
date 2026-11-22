@@ -267,15 +267,18 @@ class TapoCamera:
                     stream.thread_type = "AUTO"
                     log.info("motion stream connected: %s %dx%d", redact(self._motion_url),
                              stream.codec_context.width, stream.codec_context.height)
-                    last = 0.0
+                    last: float | None = None
                     for fr in c.decode(stream):
                         if self._stop.is_set():
                             return
                         failures = 0
                         now = time.monotonic()
-                        if now - last < period * 0.9:
+                        # Thin to detect_fps by the stream's own clock: frames arrive in
+                        # bursts over WiFi, and thinning by arrival time dropped to ~7.5 fps.
+                        ts = fr.time if fr.time is not None else now
+                        if last is not None and 0 <= ts - last < period * 0.9:
                             continue
-                        last = now
+                        last = ts
                         y = fr.reformat(width=w, height=h, format="gray").to_ndarray()
                         with self._have_frame:
                             self._frames.append(_TapoFrame(now, y, fr))

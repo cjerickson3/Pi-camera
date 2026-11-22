@@ -39,6 +39,15 @@ def _downscale(y: np.ndarray) -> np.ndarray:
     return y[: h * 2, : w * 2].reshape(h, 2, w, 2).mean(axis=(1, 3), dtype=np.float32)
 
 
+# Brightness rules are relative, but a dim scene (mean ~10, before the second illuminator)
+# makes a few percent a fraction of one luma level: encoder flicker alone moved the mean
+# >3%/frame 1 frame in 20, and kept warm-up restarting for 7-8 s of a 10 s clip (replay of
+# the 2026-11-17..19 clips). So each rule also needs an absolute change, in luma levels.
+JUMP_FLOOR = 3.0            # lighting change: mean moved > max(brightness_jump x mean, this)
+SETTLE_FLOOR = 1.0          # warm-up restarts while the mean moves > max(1/5 of that, this)/frame
+MAX_WARMUP_FACTOR = 4       # warm-up ends after this many x warmup_frames, settled or not
+
+
 def _neighbour_count(b: np.ndarray) -> np.ndarray:
     """Number of True cells in each 3x3 neighbourhood (including the centre)."""
     h, w = b.shape
@@ -60,9 +69,10 @@ class MotionDetector:
         self._bg: np.ndarray | None = None
         self._bg_mean = 0.0
         self._seen = 0
+        self._warming = 0           # frames since warm-up (re)started, restarts included
 
     def _relearn(self, frame: np.ndarray, brightness: float):
-        self._bg, self._bg_mean, self._seen = frame, brightness, 1
+        self._bg, self._bg_mean, self._seen, self._warming = frame, brightness, 1, 1
 
     def update(self, y: np.ndarray) -> MotionResult:
         cfg = self.cfg
@@ -72,20 +82,24 @@ class MotionDetector:
             self._relearn(frame, brightness)
             return MotionResult(0.0, False, False, brightness)
 
-        jump = abs(brightness - self._bg_mean) / max(self._bg_mean, 1.0)
+        delta = abs(brightness - self._bg_mean)
         if self._seen <= cfg.warmup_frames:
             # Warming up (start, or after a lighting change): track the scene frame by frame
             # so nothing from before is left in the background, and keep warming up while
-            # the brightness is still moving >3%/frame (AE settling, a lamp fading). Only
-            # here: after warm-up, a close animal can move the mean that much (the
-            # 2026-11-20 06:14 rabbit did, 3.4% in one frame).
-            # (The background is the previous frame here, so `jump` is the per-frame change.)
+            # the brightness is still moving >3%/frame (AE settling, a lamp fading), for at
+            # most MAX_WARMUP_FACTOR x warmup_frames. Only here: after warm-up, a close
+            # animal can move the mean that much (the 2026-11-20 06:14 rabbit did, 3.4%).
+            # (The background is the previous frame here, so `delta` is the per-frame change.)
+            settling = (delta > max(cfg.brightness_jump / 5 * self._bg_mean, SETTLE_FLOOR)
+                        and self._warming < MAX_WARMUP_FACTOR * cfg.warmup_frames)
             self._bg, self._bg_mean = frame, brightness
-            self._seen = 1 if jump > cfg.brightness_jump / 5 else self._seen + 1
+            self._seen = 1 if settling else self._seen + 1
+            self._warming += 1
             return MotionResult(0.0, False, False, brightness)
 
         changed = np.abs(frame - self._bg) > cfg.pixel_threshold
-        if changed.mean() > cfg.lighting_change or jump > cfg.brightness_jump:
+        jumped = delta > max(cfg.brightness_jump * self._bg_mean, JUMP_FLOOR)
+        if changed.mean() > cfg.lighting_change or jumped:
             # Headlights, an illuminator switching, AE jumps: relearn instead of triggering.
             # The overall-brightness test catches lamps that light only part of the scene
             # (the grass brightens, the dark sidewalk doesn't).

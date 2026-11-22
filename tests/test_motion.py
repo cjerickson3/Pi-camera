@@ -154,3 +154,21 @@ def test_close_animal_dimming_the_frame_is_still_motion():
     results = run(MotionDetector(MotionConfig(), SHAPE), scene, 8)
     assert not any(r.lighting_change for r in results)
     assert any(r.motion for r in results[int(5.2 / DT):int(6 / DT)])
+
+
+def test_dim_flickering_scene_still_warms_up_and_detects():
+    # 2026-11-17..19 nights, mean ~10: encoder flicker moved the mean >3%/frame now and then,
+    # which kept warm-up restarting and the detector blind for most of each clip.
+    rng = np.random.default_rng(3)
+    ground = rng.normal(10, 3, SIZE[::-1])
+    square = moving_square_scene(SIZE, 4, 6)
+
+    def scene(t):
+        flicker = rng.choice([0.0, 0.0, 0.0, 0.6])          # whole frame +0.6 luma (6%) some frames
+        f = ground + flicker + rng.normal(0, 1, ground.shape)
+        sq = square(t).astype(float) - noise_scene(SIZE)(t)  # just the square's +80
+        return np.clip(f + np.where(sq > 40, 60, 0), 0, 255).astype(np.uint8)
+
+    results = run(MotionDetector(MotionConfig(), SHAPE), scene, 8)
+    assert not any(r.lighting_change for r in results)
+    assert any(r.motion for r in results[int(4.2 / DT):int(6 / DT)])
